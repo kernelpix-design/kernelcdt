@@ -28,11 +28,21 @@ jobs:
           echo "Theos: OK"
 
       - name: Baixar iOS SDK
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           sudo mkdir -p $THEOS/sdks
-          SDK_URL=$(curl -fsSL https://api.github.com/repos/theos/sdks/releases/latest | python3 -c "
+          # Usar token para evitar rate limit da API GitHub
+          SDK_URL=$(curl -fsSL -H "Authorization: token $GH_TOKEN" \
+            https://api.github.com/repos/theos/sdks/releases/latest | python3 -c "
           import sys, json, re
-          data = json.load(sys.stdin)
+          raw = sys.stdin.read()
+          try:
+              data = json.loads(raw)
+          except Exception as e:
+              print('JSON error:', e, file=sys.stderr)
+              print('Response:', raw[:200], file=sys.stderr)
+              sys.exit(1)
           assets = [a['browser_download_url'] for a in data.get('assets', [])
                     if 'iPhoneOS' in a.get('name','') and a['name'].endswith('.tar.xz')]
           def ver(u):
@@ -44,7 +54,7 @@ jobs:
           print(assets[-1] if assets else '')
           ")
           echo "SDK URL: $SDK_URL"
-          curl -fL "$SDK_URL" -o /tmp/sdk.tar.xz
+          curl -fL -H "Authorization: token $GH_TOKEN" "$SDK_URL" -o /tmp/sdk.tar.xz
           sudo tar -xJf /tmp/sdk.tar.xz -C $THEOS/sdks/
           echo "SDK instalado:"
           ls $THEOS/sdks/
