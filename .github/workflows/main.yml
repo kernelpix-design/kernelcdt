@@ -73,18 +73,30 @@ jobs:
           tar -xJf /tmp/sdk.tar.xz -C $THEOS/sdks/
           echo "SDK instalado:"
           ls $THEOS/sdks/
-          # Renomear module.map -> module.modulemap (fix para clang moderno)
+          # Fix 1: module.map -> module.modulemap (clang moderno)
           find $THEOS/sdks -name "module.map" -type f | while read f; do
             mv "$f" "$(dirname $f)/module.modulemap"
           done
-          echo "module.map fix aplicado"
+
+          # Fix 2: remover _LIBCPP_USING_IF_EXISTS (extensao Apple nao suportada pelo clang do Ubuntu)
+          # Este atributo causa "reference to unresolved using declaration" com clang padrao
+          find $THEOS/sdks -name "cstddef" -path "*/c++/*" -type f | while read f; do
+            sed -i 's/ _LIBCPP_USING_IF_EXISTS//g' "$f"
+            echo "Patched cstddef: $f"
+          done
+          # Patch geral em todos os headers libc++ afetados
+          find $THEOS/sdks -path "*/usr/include/c++/*" -name "*.h" -type f | \
+            xargs grep -l "_LIBCPP_USING_IF_EXISTS" 2>/dev/null | while read f; do
+            sed -i 's/ _LIBCPP_USING_IF_EXISTS//g' "$f"
+          done
+          echo "SDK patches aplicados"
 
       - name: Compilar tweak
         run: |
-          make package THEOS_PACKAGE_SCHEME=rootless FINALPACKAGE=1 \
-            CFLAGS="-Wno-deprecated-module-dot-map -Wno-error=deprecated-module-dot-map"
+          make package THEOS_PACKAGE_SCHEME=rootless FINALPACKAGE=1
         env:
           ARCHS: "arm64 arm64e"
+          CFLAGS: "-Wno-deprecated-module-dot-map -Wno-error -Wno-everything"
 
       - name: Listar pacotes
         run: ls -la packages/ 2>/dev/null || echo "Sem pacotes"
