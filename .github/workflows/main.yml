@@ -3,7 +3,7 @@ name: Build LordVCAM Bypass .deb
 on:
   push:
     branches: [ main, master ]
-  workflow_dispatch:  # Permite rodar manualmente pelo site
+  workflow_dispatch:
 
 jobs:
   build:
@@ -12,32 +12,58 @@ jobs:
       THEOS: /opt/theos
 
     steps:
-      - name: Checkout codigo
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Instalar dependencias
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq \
-            build-essential git make fakeroot rsync zip curl xz-utils
+            build-essential git make fakeroot rsync zip curl xz-utils \
+            clang lld
 
       - name: Instalar ldid
         run: |
-          curl -sL https://github.com/ProcursusTeam/ldid/releases/latest/download/ldid_linux_x86_64 \
+          curl -fsSL https://github.com/ProcursusTeam/ldid/releases/latest/download/ldid_linux_x86_64 \
             -o /usr/local/bin/ldid
           chmod +x /usr/local/bin/ldid
-          ldid 2>/dev/null || true
-          echo "ldid instalado"
+          echo "ldid: OK"
 
-      - name: Instalar Theos
+      - name: Instalar Theos (sem toolchain pesada)
         run: |
-          git clone --recursive https://github.com/theos/theos.git $THEOS
-          echo "Theos instalado em $THEOS"
+          git clone --depth 1 https://github.com/theos/theos.git $THEOS
+          cd $THEOS
+          git submodule init
+          # Pular toolchain (muito grande) - vamos usar clang do sistema
+          git config submodule.vendor/toolchain.update none
+          git submodule update --recursive --depth 1 2>/dev/null || true
+          echo "Theos: OK"
+
+      - name: Configurar toolchain (symlinks para clang do sistema)
+        run: |
+          mkdir -p $THEOS/toolchain/linux/iphone/bin
+          # Encontrar clang instalado
+          CLANG=$(which clang || which clang-17 || which clang-16 || which clang-15)
+          CLANGPP=$(which clang++ || which clang++-17 || which clang++-16 || which clang++-15)
+          echo "Usando clang: $CLANG"
+          # Criar symlinks
+          ln -sf $CLANG  $THEOS/toolchain/linux/iphone/bin/clang
+          ln -sf $CLANGPP $THEOS/toolchain/linux/iphone/bin/clang++
+          # Ferramentas adicionais
+          ln -sf $(which ar)     $THEOS/toolchain/linux/iphone/bin/ar     2>/dev/null || true
+          ln -sf $(which nm)     $THEOS/toolchain/linux/iphone/bin/nm     2>/dev/null || true
+          ln -sf $(which ranlib) $THEOS/toolchain/linux/iphone/bin/ranlib 2>/dev/null || true
+          ln -sf $(which strip)  $THEOS/toolchain/linux/iphone/bin/strip  2>/dev/null || true
+          LD_BIN=$(which ld.lld 2>/dev/null || which lld 2>/dev/null || which ld)
+          ln -sf $LD_BIN $THEOS/toolchain/linux/iphone/bin/ld 2>/dev/null || true
+          # Verificar
+          echo "Toolchain configurado:"
+          ls -la $THEOS/toolchain/linux/iphone/bin/
+          $THEOS/toolchain/linux/iphone/bin/clang --version
 
       - name: Baixar iOS SDK
         run: |
           mkdir -p $THEOS/sdks
-          # Buscar URL dinamicamente da ultima release
           SDK_URL=$(curl -fsSL https://api.github.com/repos/theos/sdks/releases/latest \
             | grep browser_download_url \
             | grep "iPhoneOS" \
@@ -51,12 +77,13 @@ jobs:
       - name: Compilar tweak
         run: |
           make package THEOS_PACKAGE_SCHEME=rootless FINALPACKAGE=1
-        working-directory: .
+        env:
+          ARCHS: "arm64 arm64e"
 
-      - name: Listar pacotes gerados
-        run: ls -la packages/
+      - name: Listar pacotes
+        run: ls -la packages/ 2>/dev/null || echo "Pasta packages nao encontrada"
 
-      - name: Upload .deb como artefato
+      - name: Upload .deb
         uses: actions/upload-artifact@v4
         with:
           name: LordVCAMBypass-deb
