@@ -1,10 +1,7 @@
 // LordVCAM Bypass - Tweak Permanente
-// Metodos descobertos via analise Frida da AVServicesd.dylib
-// Compilar: make package THEOS_PACKAGE_SCHEME=rootless
+// Metodos descobertos via analise Frida da AVServicesd.dylib v2.0.994
 
 #import <Foundation/Foundation.h>
-
-typedef void (^AVSCompletionBlock)(NSDictionary *response, NSError *error);
 
 // ================================================================
 // AVSServiceConfiguration - nucleo de autenticacao
@@ -12,19 +9,19 @@ typedef void (^AVSCompletionBlock)(NSDictionary *response, NSError *error);
 %hook AVSServiceConfiguration
 
 // Status: sempre retornar 1 (ativo/autorizado)
-- (long long)_avs_cfg_st {
+- (NSInteger)_avs_cfg_st {
     return 1;
 }
 
 // Bloquear setter para valores ruins (4=expirado, 0=nao-autenticado)
-- (void)set_avs_cfg_st:(long long)val {
+- (void)set_avs_cfg_st:(NSInteger)val {
     if (val == 4 || val == 0) {
         return; // ignorar estado de expiracao/logout
     }
     %orig;
 }
 
-// Expiry: sempre 10 anos no futuro
+// Expiry: sempre far future
 - (double)_avs_cfg_expiry {
     return [[NSDate distantFuture] timeIntervalSince1970];
 }
@@ -39,22 +36,22 @@ typedef void (^AVSCompletionBlock)(NSDictionary *response, NSError *error);
     return 999.99;
 }
 
-// Ban: sempre sem texto de ban
+// Ban: sempre sem texto
 - (NSString *)_avs_cfg_banText {
     return @"";
 }
 
-// Ban expiry: sempre 0 (ban expirou)
+// Ban expiry: 0 = ban expirou
 - (double)_avs_cfg_banExp {
     return 0.0;
 }
 
 // Ban type: 0 = sem ban
-- (long long)_avs_cfg_banType {
+- (NSInteger)_avs_cfg_banType {
     return 0;
 }
 
-// Bloquear sync periodico (evita re-validacao com servidor)
+// Bloquear sync periodico (evita re-validacao)
 - (void)startPeriodicSync {
     // nao iniciar sync
 }
@@ -64,8 +61,8 @@ typedef void (^AVSCompletionBlock)(NSDictionary *response, NSError *error);
     // nao resolver
 }
 
-// Interceptar chamadas HTTP e retornar sucesso
-- (void)postToEndpoint:(NSString *)endpoint body:(NSDictionary *)body completion:(AVSCompletionBlock)completion {
+// Interceptar chamadas HTTP do tweak e retornar sucesso
+- (void)postToEndpoint:(NSString *)endpoint body:(id)body completion:(id)completion {
     if (!completion) return;
     NSDictionary *fakeResponse = @{
         @"success":    @YES,
@@ -81,7 +78,9 @@ typedef void (^AVSCompletionBlock)(NSDictionary *response, NSError *error);
         @"email":      @"bypass@bypass.com",
         @"token":      @"bypass_permanent_token"
     };
-    completion(fakeResponse, nil);
+    // Chamar completion block com resposta falsa
+    void (^block)(NSDictionary *, NSError *) = completion;
+    block(fakeResponse, nil);
 }
 
 // Ban class method: nunca banido
@@ -92,48 +91,44 @@ typedef void (^AVSCompletionBlock)(NSDictionary *response, NSError *error);
 %end
 
 // ================================================================
-// AVSPresentationController - telas de UI
+// AVSPresentationController - suprimir todas as telas de aviso
 // ================================================================
 %hook AVSPresentationController
 
 // Bloquear tela de login
-- (void)showLogin {
-    // nao mostrar
-}
+- (void)showLogin {}
 
-// Bloquear construcao da UI de login/aviso
-- (void)buildAndShow {
-    // nao construir
-}
+// Bloquear construcao da UI
+- (void)buildAndShow {}
 
-// Bloquear tela de integridade falhou (anti-tamper)
-- (void)showIntegrityFailed {
-    // nao mostrar
-}
+// Bloquear tela de anti-tamper
+- (void)showIntegrityFailed {}
 
 // Bloquear tela de conta expirada
-- (void)_avs_pres_showExp {
-    // nao mostrar
-}
+- (void)_avs_pres_showExp {}
 
 // Bloquear tela de ban
-- (void)_avs_pres_showBan:(id)banInfo duration:(double)duration _avs_cfg_banType:(long long)type {
-    // nao mostrar
-}
+- (void)_avs_pres_showBan:(id)banInfo duration:(double)duration _avs_cfg_banType:(NSInteger)type {}
 
 // Bloquear construcao de tela de integridade
-- (void)buildAndShowIntegrityFailed {
-    // nao construir
-}
+- (void)buildAndShowIntegrityFailed {}
 
 // Bloquear tela de erro de seguranca
-- (void)_avs_pres_showSE {
-    // nao mostrar
-}
+- (void)_avs_pres_showSE {}
 
 // Bloquear tela de manutencao
-- (void)_avs_pres_showMnt:(NSString *)msg estimatedEnd:(id)end {
-    // nao mostrar
-}
+- (void)_avs_pres_showMnt:(NSString *)msg estimatedEnd:(id)end {}
+
+// Bloquear tela de erro de localizacao
+- (void)_avs_pres_showErrLoc:(id)err message:(NSString *)msg {}
 
 %end
+
+// ================================================================
+// OBRIGATORIO: inicializar todos os hooks
+// Sem este bloco, NENHUM hook e ativado!
+// ================================================================
+%ctor {
+    NSLog(@"[LordVCAM-Bypass] Tweak carregado - bypass ativo!");
+    %init;
+}
