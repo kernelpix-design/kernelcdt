@@ -61,6 +61,7 @@ jobs:
 
       - name: Compilar tweak
         run: |
+          chmod +x postinst 2>/dev/null || true
           make package THEOS_PACKAGE_SCHEME=rootless FINALPACKAGE=1
         env:
           ARCHS: "arm64 arm64e"
