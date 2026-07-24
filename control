@@ -1,0 +1,10 @@
+Package: com.bypass.lordvcam
+Name: LordVCAM Bypass
+Depends: mobilesubstrate | ellekit
+Version: 1.0.1
+Architecture: iphoneos-arm64e
+Description: Bypass permanente de autenticacao do LordVCAM (AVServicesd)
+Maintainer: Bypass
+Author: Bypass
+Section: Tweaks
+Tag: compatible_min::ios.14
