@@ -1,124 +1,122 @@
-// LordVCAM Bypass v1.0.4
-// Abordagem completa: escrever state.plist + hooks + desativar AVSAntiTamper
-
+// LordVCAM Bypass v1.0.5 - porta direta do frida_bypass_v8.js
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
 // ================================================================
-// Escrever plist de estado fake (mesmo metodo que o Frida V8 usava)
-// ================================================================
-static void writeFakeStatePlist() {
-    NSString *dir  = @"/var/tmp/com.apple.avfcache";
-    NSString *path = [dir stringByAppendingPathComponent:@"state.plist"];
-
-    [[NSFileManager defaultManager]
-        createDirectoryAtPath:dir
-        withIntermediateDirectories:YES
-        attributes:nil
-        error:nil];
-
-    NSDictionary *state = @{
-        @"st":        @1,
-        @"expiry":    @([[NSDate distantFuture] timeIntervalSince1970]),
-        @"remaining": @(86400.0 * 3650),
-        @"balance":   @999.99,
-        @"email":     @"bypass@bypass.com",
-        @"token":     @"bypass_permanent_token",
-        @"purchased": @YES,
-        @"banText":   @"",
-        @"banType":   @0,
-        @"banExp":    @0.0
-    };
-
-    BOOL ok = [state writeToFile:path atomically:YES];
-    NSLog(@"[LordVCAMBypass] state.plist escrito: %@ -> %@", ok ? @"OK" : @"ERRO", path);
-}
-
-// ================================================================
-// AVSAntiTamper - desativar deteccao de bypass/frida/jailbreak
+// AVSAntiTamper - desativar deteccao de tamper/frida
 // ================================================================
 %hook AVSAntiTamper
-
-+ (BOOL)checkIntegrity       { return YES; }
-+ (BOOL)isTampered           { return NO;  }
-+ (BOOL)hasFrida             { return NO;  }
-+ (BOOL)isModified           { return NO;  }
-+ (void)performCheck         {}
-+ (void)startMonitoring      {}
-+ (id)sharedInstance         { return %orig; }
-
-- (BOOL)checkIntegrity       { return YES; }
-- (BOOL)isTampered           { return NO;  }
-- (BOOL)hasFrida             { return NO;  }
-- (void)performCheck         {}
-
++ (BOOL)checkIntegrity  { return YES; }
++ (BOOL)isTampered      { return NO;  }
++ (BOOL)hasFrida        { return NO;  }
++ (BOOL)isModified      { return NO;  }
++ (void)performCheck    {}
++ (void)startMonitoring {}
 %end
 
 // ================================================================
-// AVSServiceConfiguration - forcar status ativo
+// AVSServiceConfiguration - forcas status ativo + bloquear sync
 // ================================================================
 %hook AVSServiceConfiguration
 
 - (NSInteger)_avs_cfg_st     { return 1; }
 
 - (void)set_avs_cfg_st:(NSInteger)val {
-    // Bloqueia qualquer tentativa de mudar para expirado/inativo
-    if (val == 0 || val == 4 || val == 5 || val == 6) {
-        NSLog(@"[LordVCAMBypass] BLOQUEADO set_avs_cfg_st: %ld", (long)val);
-        return;
-    }
+    if (val == 0 || val == 4 || val == 5 || val == 6) return;
     %orig;
 }
 
-- (double)_avs_cfg_expiry    { return [[NSDate distantFuture] timeIntervalSince1970]; }
-- (double)_avs_cfg_remaining { return 86400.0 * 3650; }
-- (double)_avs_cfg_balance   { return 999.99; }
+- (double)_avs_cfg_expiry      { return [[NSDate distantFuture] timeIntervalSince1970]; }
+- (double)_avs_cfg_remaining   { return 86400.0 * 3650; }
+- (double)_avs_cfg_balance     { return 999.99; }
 - (NSString *)_avs_cfg_banText { return @""; }
-- (double)_avs_cfg_banExp    { return 0.0; }
-- (NSInteger)_avs_cfg_banType { return 0; }
+- (double)_avs_cfg_banExp      { return 0.0; }
+- (NSInteger)_avs_cfg_banType  { return 0; }
+- (void)startPeriodicSync      {}
+- (void)_avs_cfg_resolveNet    {}
++ (BOOL)_avs_pres_isBanned     { return NO; }
 
-- (void)startPeriodicSync    {}
-- (void)_avs_cfg_resolveNet  {}
+// Hook critico: interceptar chamada HTTP e injetar resposta de sucesso
+- (void)postToEndpoint:(id)endpoint body:(id)body completion:(id)completion {
+    NSLog(@"[LordVCAMBypass] postToEndpoint INTERCEPTADO");
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 30 * NSEC_PER_MSEC),
+                   dispatch_get_main_queue(), ^{
+        NSMutableDictionary *fakeResp = [NSMutableDictionary dictionary];
+        fakeResp[@"success"]    = @YES;
+        fakeResp[@"status"]     = @"ok";
+        fakeResp[@"authorized"] = @YES;
+        fakeResp[@"purchased"]  = @YES;
+        fakeResp[@"st"]         = @1;
+        fakeResp[@"expiry"]     = @([[NSDate distantFuture] timeIntervalSince1970]);
+        fakeResp[@"remaining"]  = @(86400.0 * 3650);
+        fakeResp[@"balance"]    = @999.99;
+        fakeResp[@"banText"]    = @"";
+        fakeResp[@"banType"]    = @0;
+        fakeResp[@"email"]      = @"bypass@bypass.com";
+        fakeResp[@"token"]      = @"bypass_tok";
+        if (completion) {
+            void (^block)(NSDictionary *, id) = completion;
+            block(fakeResp, nil);
+        }
+        NSLog(@"[LordVCAMBypass] postToEndpoint resposta injetada!");
+    });
+}
 
-+ (BOOL)_avs_pres_isBanned   { return NO; }
+// Capturar instancia para forcar clearBan + writeSession
+- (void)_avs_cfg_startTrk {
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        NSLog(@"[LordVCAMBypass] startTrk capturado, forcando clearBan + writeSession");
+        @try { [[self class] performSelector:@selector(_avs_pres_clearBan)]; } @catch(NSException *e) {}
+        @try { [self performSelector:@selector(_avs_cfg_writeSession)];      } @catch(NSException *e) {}
+    });
+}
 
 %end
 
 // ================================================================
-// AVSPresentationController - bloquear APENAS telas de erro/login
+// AVSPresentationController - bloquear telas de erro/login
+// NAO bloquear buildAndShow (abre via gesto de volume)
 // ================================================================
 %hook AVSPresentationController
-
-- (void)showLogin {
-    NSLog(@"[LordVCAMBypass] showLogin BLOQUEADO");
-}
-
-- (void)_avs_pres_showExp {
-    NSLog(@"[LordVCAMBypass] showExp BLOQUEADO");
-}
-
-- (void)_avs_pres_showBan:(id)a duration:(double)b _avs_cfg_banType:(NSInteger)c {
-    NSLog(@"[LordVCAMBypass] showBan BLOQUEADO");
-}
-
-- (void)showIntegrityFailed         { NSLog(@"[LordVCAMBypass] integrityFailed BLOQUEADO"); }
-- (void)buildAndShowIntegrityFailed { NSLog(@"[LordVCAMBypass] buildAndShowIntegrityFailed BLOQUEADO"); }
-
-// buildAndShow NAO bloqueado - e o que abre a camera via gesto de volume
-
+- (void)showLogin                                                              { NSLog(@"[LordVCAMBypass] showLogin BLOQUEADO"); }
+- (void)_avs_pres_showExp                                                     {}
+- (void)_avs_pres_showBan:(id)a duration:(double)b _avs_cfg_banType:(NSInteger)c {}
+- (void)showIntegrityFailed                                                   {}
+- (void)buildAndShowIntegrityFailed                                           {}
+- (void)_avs_pres_buildExp                                                    {}
+- (void)_avs_pres_buildBan:(id)a duration:(double)b _avs_cfg_banType:(NSInteger)c {}
+- (void)_avs_pres_showSE                                                      {}
+- (void)_avs_pres_showMnt:(id)a estimatedEnd:(id)b                            {}
+- (void)_avs_pres_showErrLoc:(id)a message:(id)b                              {}
 %end
 
 // ================================================================
-// INIT
+// INIT - escrever state.plist fake e ativar todos os hooks
 // ================================================================
 %ctor {
-    NSLog(@"[LordVCAMBypass] v1.0.4 iniciando em: %@",
+    NSLog(@"[LordVCAMBypass] v1.0.5 carregado em: %@",
           [[NSBundle mainBundle] bundleIdentifier] ?: @"(sem bundle)");
 
-    // Escrever estado fake antes que o tweak original leia
-    writeFakeStatePlist();
+    NSString *dir  = @"/var/tmp/com.apple.avfcache";
+    NSString *path = [dir stringByAppendingPathComponent:@"state.plist"];
+    [[NSFileManager defaultManager] createDirectoryAtPath:dir
+        withIntermediateDirectories:YES attributes:nil error:nil];
+    NSDictionary *state = @{
+        @"st":        @1,
+        @"expiry":    @([[NSDate distantFuture] timeIntervalSince1970]),
+        @"remaining": @(86400.0 * 3650),
+        @"balance":   @999.99,
+        @"email":     @"bypass@bypass.com",
+        @"token":     @"bypass_token",
+        @"purchased": @YES,
+        @"banText":   @"",
+        @"banType":   @0,
+        @"banExp":    @0.0
+    };
+    [state writeToFile:path atomically:YES];
+    NSLog(@"[LordVCAMBypass] state.plist escrito: %@", path);
 
     %init;
-
-    NSLog(@"[LordVCAMBypass] v1.0.4 hooks ativos!");
+    NSLog(@"[LordVCAMBypass] v1.0.5 hooks todos ativos!");
 }
