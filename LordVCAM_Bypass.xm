@@ -1,117 +1,75 @@
-// LordVCAM Bypass - Tweak Permanente
-// Metodos descobertos via analise Frida da AVServicesd.dylib v2.0.994
+// LordVCAM Bypass v1.0.3 - Minimalista
+// Apenas o necessario para bypassar o login sem quebrar o gesto de volume
 
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
 // ================================================================
-// AVSServiceConfiguration - nucleo de autenticacao
+// AVSServiceConfiguration - forcas status = ativo (1)
 // ================================================================
 %hook AVSServiceConfiguration
 
-- (NSInteger)_avs_cfg_st { return 1; }
+// Sempre retorna 1 = ativo/autorizado
+- (NSInteger)_avs_cfg_st {
+    return 1;
+}
 
+// Bloqueia tentativas de mudar para expirado (4) ou nao-autenticado (0)
 - (void)set_avs_cfg_st:(NSInteger)val {
-    if (val == 4 || val == 0) return;
+    if (val == 0 || val == 4 || val == 5 || val == 6) {
+        return; // ignorar estado ruim
+    }
     %orig;
 }
 
+// Expiracao: data distante
 - (double)_avs_cfg_expiry {
     return [[NSDate distantFuture] timeIntervalSince1970];
 }
 
-- (double)_avs_cfg_remaining {
-    return 86400.0 * 3650;
-}
+// Sem ban
+- (NSString *)_avs_cfg_banText  { return @""; }
+- (double)_avs_cfg_banExp       { return 0.0; }
+- (NSInteger)_avs_cfg_banType   { return 0; }
 
-- (double)_avs_cfg_balance {
-    return 999.99;
-}
-
-- (NSString *)_avs_cfg_banText {
-    return @"";
-}
-
-- (double)_avs_cfg_banExp {
-    return 0.0;
-}
-
-- (NSInteger)_avs_cfg_banType {
-    return 0;
-}
-
-- (void)startPeriodicSync {}
-
-- (void)_avs_cfg_resolveNet {}
-
-- (void)postToEndpoint:(NSString *)endpoint body:(id)body completion:(id)completion {
-    NSLog(@"[LordVCAMBypass] postToEndpoint interceptado: %@", endpoint);
-    if (!completion) return;
-    NSDictionary *fakeResponse = @{
-        @"success":    @YES,
-        @"status":     @"ok",
-        @"authorized": @YES,
-        @"purchased":  @YES,
-        @"st":         @1,
-        @"expiry":     @([[NSDate distantFuture] timeIntervalSince1970]),
-        @"remaining":  @(86400.0 * 3650),
-        @"balance":    @999.99,
-        @"banText":    @"",
-        @"banType":    @0,
-        @"email":      @"bypass@bypass.com",
-        @"token":      @"bypass_permanent_token"
-    };
-    void (^block)(NSDictionary *, NSError *) = completion;
-    block(fakeResponse, nil);
-}
-
-+ (BOOL)_avs_pres_isBanned {
-    return NO;
-}
+// Bloquear sync periodico com o servidor (evita reset do estado)
+- (void)startPeriodicSync       {}
+- (void)_avs_cfg_resolveNet     {}
 
 %end
 
 // ================================================================
-// AVSPresentationController - suprimir telas de aviso
+// AVSPresentationController - bloquear SOMENTE telas de erro
 // ================================================================
 %hook AVSPresentationController
 
-// LOGIN / EXPIRADO / BAN: bloquear
+// Bloquear tela de login
 - (void)showLogin {
-    NSLog(@"[LordVCAMBypass] showLogin BLOQUEADO");
+    NSLog(@"[LordVCAMBypass] showLogin bloqueado");
 }
 
+// Bloquear tela de expirado
 - (void)_avs_pres_showExp {
-    NSLog(@"[LordVCAMBypass] showExp BLOQUEADO");
+    NSLog(@"[LordVCAMBypass] showExp bloqueado");
 }
 
-- (void)_avs_pres_showBan:(id)banInfo duration:(double)duration _avs_cfg_banType:(NSInteger)type {
-    NSLog(@"[LordVCAMBypass] showBan BLOQUEADO");
-}
+// Bloquear tela de ban
+- (void)_avs_pres_showBan:(id)a duration:(double)b _avs_cfg_banType:(NSInteger)c {}
 
-- (void)showIntegrityFailed {
-    NSLog(@"[LordVCAMBypass] showIntegrityFailed BLOQUEADO");
-}
+// Bloquear falha de integridade
+- (void)showIntegrityFailed         {}
+- (void)buildAndShowIntegrityFailed {}
 
-- (void)buildAndShowIntegrityFailed {
-    NSLog(@"[LordVCAMBypass] buildAndShowIntegrityFailed BLOQUEADO");
-}
-
-- (void)_avs_pres_showSE {}
-- (void)_avs_pres_showMnt:(NSString *)msg estimatedEnd:(id)end {}
-- (void)_avs_pres_showErrLoc:(id)err message:(NSString *)msg {}
-
-// buildAndShow: LIBERADO - e a tela principal da camera (ativada pelo volume)
-// Com o status sempre retornando 1 (ativo), ele mostra a camera, nao o login
+// buildAndShow: NAO bloqueado - e ele que abre o LordVCAM via gesto de volume
+// Com _avs_cfg_st retornando 1, ele vai mostrar a camera, nao o login
 
 %end
 
 // ================================================================
-// Inicializar hooks - OBRIGATORIO
+// INIT - obrigatorio para ativar os hooks
 // ================================================================
 %ctor {
-    NSLog(@"[LordVCAMBypass] ===== TWEAK CARREGADO EM: %@ =====",
-          [[NSBundle mainBundle] bundleIdentifier] ?: @"unknown");
+    NSLog(@"[LordVCAMBypass] v1.0.3 carregado em: %@",
+          [[NSBundle mainBundle] bundleIdentifier] ?: @"(sem bundle)");
     %init;
-    NSLog(@"[LordVCAMBypass] Todos os hooks registrados!");
 }
