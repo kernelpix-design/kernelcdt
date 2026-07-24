@@ -76,16 +76,9 @@
 // ================================================================
 %hook AVSPresentationController
 
+// LOGIN / EXPIRADO / BAN: bloquear
 - (void)showLogin {
     NSLog(@"[LordVCAMBypass] showLogin BLOQUEADO");
-}
-
-- (void)buildAndShow {
-    NSLog(@"[LordVCAMBypass] buildAndShow BLOQUEADO");
-}
-
-- (void)showIntegrityFailed {
-    NSLog(@"[LordVCAMBypass] showIntegrityFailed BLOQUEADO");
 }
 
 - (void)_avs_pres_showExp {
@@ -96,6 +89,10 @@
     NSLog(@"[LordVCAMBypass] showBan BLOQUEADO");
 }
 
+- (void)showIntegrityFailed {
+    NSLog(@"[LordVCAMBypass] showIntegrityFailed BLOQUEADO");
+}
+
 - (void)buildAndShowIntegrityFailed {
     NSLog(@"[LordVCAMBypass] buildAndShowIntegrityFailed BLOQUEADO");
 }
@@ -103,6 +100,9 @@
 - (void)_avs_pres_showSE {}
 - (void)_avs_pres_showMnt:(NSString *)msg estimatedEnd:(id)end {}
 - (void)_avs_pres_showErrLoc:(id)err message:(NSString *)msg {}
+
+// buildAndShow: LIBERADO - e a tela principal da camera (ativada pelo volume)
+// Com o status sempre retornando 1 (ativo), ele mostra a camera, nao o login
 
 %end
 
