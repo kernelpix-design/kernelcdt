@@ -62,7 +62,9 @@ jobs:
                     if 'iPhoneOS' in a.get('name','') and a['name'].endswith('.tar.xz')]
           def ver(u):
               m = re.search(r'iPhoneOS([\d.]+)', u)
-              return tuple(int(x) for x in m.group(1).split('.')) if m else (0,)
+              if not m: return (0,)
+              parts = [p for p in m.group(1).split('.') if p.isdigit()]
+              return tuple(int(x) for x in parts) if parts else (0,)
           assets.sort(key=ver)
           print(assets[-1] if assets else '')
           ")
