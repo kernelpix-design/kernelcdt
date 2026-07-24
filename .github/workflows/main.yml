@@ -37,8 +37,14 @@ jobs:
       - name: Baixar iOS SDK
         run: |
           mkdir -p $THEOS/sdks
-          curl -sL https://github.com/theos/sdks/releases/latest/download/iPhoneOS18.2.sdk.tar.xz \
-            -o /tmp/sdk.tar.xz
+          # Buscar URL dinamicamente da ultima release
+          SDK_URL=$(curl -fsSL https://api.github.com/repos/theos/sdks/releases/latest \
+            | grep browser_download_url \
+            | grep "iPhoneOS" \
+            | head -1 \
+            | cut -d'"' -f4)
+          echo "SDK URL: $SDK_URL"
+          curl -fL "$SDK_URL" -o /tmp/sdk.tar.xz
           tar -xJf /tmp/sdk.tar.xz -C $THEOS/sdks/
           ls $THEOS/sdks/
 
