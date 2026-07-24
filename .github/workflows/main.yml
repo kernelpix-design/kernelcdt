@@ -19,8 +19,15 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq \
-            build-essential git make fakeroot rsync zip curl \
-            ldid xz-utils
+            build-essential git make fakeroot rsync zip curl xz-utils
+
+      - name: Instalar ldid
+        run: |
+          curl -sL https://github.com/ProcursusTeam/ldid/releases/latest/download/ldid_linux_x86_64 \
+            -o /usr/local/bin/ldid
+          chmod +x /usr/local/bin/ldid
+          ldid 2>/dev/null || true
+          echo "ldid instalado"
 
       - name: Instalar Theos
         run: |
