@@ -18,11 +18,8 @@ jobs:
 
       - name: Instalar ldid
         run: |
-          brew install ldid 2>/dev/null || \
-          curl -fsSL https://github.com/ProcursusTeam/ldid/releases/latest/download/ldid_macos_universal \
-            -o /usr/local/bin/ldid && chmod +x /usr/local/bin/ldid
-          ldid 2>/dev/null || true
-          echo "ldid: OK"
+          brew install ldid
+          echo "ldid: $(which ldid)"
 
       - name: Instalar Theos
         run: |
