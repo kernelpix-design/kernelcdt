@@ -1,0 +1,51 @@
+name: Build LordVCAM Bypass .deb
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:  # Permite rodar manualmente pelo site
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      THEOS: /opt/theos
+
+    steps:
+      - name: Checkout codigo
+        uses: actions/checkout@v4
+
+      - name: Instalar dependencias
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            build-essential git make fakeroot rsync zip curl \
+            ldid xz-utils
+
+      - name: Instalar Theos
+        run: |
+          git clone --recursive https://github.com/theos/theos.git $THEOS
+          echo "Theos instalado em $THEOS"
+
+      - name: Baixar iOS SDK
+        run: |
+          mkdir -p $THEOS/sdks
+          curl -sL https://github.com/theos/sdks/releases/latest/download/iPhoneOS18.2.sdk.tar.xz \
+            -o /tmp/sdk.tar.xz
+          tar -xJf /tmp/sdk.tar.xz -C $THEOS/sdks/
+          ls $THEOS/sdks/
+
+      - name: Compilar tweak
+        run: |
+          make package THEOS_PACKAGE_SCHEME=rootless FINALPACKAGE=1
+        working-directory: .
+
+      - name: Listar pacotes gerados
+        run: ls -la packages/
+
+      - name: Upload .deb como artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: LordVCAMBypass-deb
+          path: packages/*.deb
+          retention-days: 30
