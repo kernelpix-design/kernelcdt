@@ -1,4 +1,4 @@
-// LordVCAM Bypass v1.0.5 - porta direta do frida_bypass_v8.js
+// LordVCAM Bypass v1.0.6 - porta direta do frida_bypass_v8.js
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
@@ -59,16 +59,6 @@
             block(fakeResp, nil);
         }
         NSLog(@"[LordVCAMBypass] postToEndpoint resposta injetada!");
-    });
-}
-
-// Capturar instancia para forcar clearBan + writeSession
-- (void)_avs_cfg_startTrk {
-    static dispatch_once_t once;
-    dispatch_once(&once, ^{
-        NSLog(@"[LordVCAMBypass] startTrk capturado, forcando clearBan + writeSession");
-        @try { [(id)[self class] performSelector:@selector(_avs_pres_clearBan)]; } @catch(NSException *e) {}
-        @try { [(id)self performSelector:@selector(_avs_cfg_writeSession)];      } @catch(NSException *e) {}
     });
 }
 
